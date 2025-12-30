@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { firebaseAuthService } from '@/services/firebaseAuth'
 
 export interface User {
   id: string
@@ -22,154 +23,275 @@ interface AuthStore {
   loading: boolean
   error: string | null
   redirectIntent: RedirectIntent
+  emailVerificationRequired: boolean
   
   // Actions
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   setUser: (user: User | null) => void
-  updateProfile: (updates: Partial<User>) => Promise<void>
+  updateProfile: (updates: Partial<User> & { phone?: string }) => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
   setRedirectIntent: (intent: RedirectIntent) => void
   clearRedirectIntent: () => void
+  resetPassword: (email: string) => Promise<void>
+  resendVerificationEmail: () => Promise<void>
+  checkEmailVerification: () => Promise<boolean>
+  initializeAuth: () => Promise<void>
+  startEmailVerificationPolling: () => void
+  stopEmailVerificationPolling: () => void
 }
-
-// Mock user data for demo
-const createMockUser = (name: string, email: string): User => ({
-  id: `user-${Date.now()}`,
-  name,
-  email,
-  role: 'buyer',
-  avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face',
-  joinDate: new Date(),
-  verificationStatus: 'verified'
-})
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set, get) => ({
-      user: null, // Start logged out
-      isAuthenticated: false,
-      loading: false,
-      error: null,
-      redirectIntent: { type: 'none' },
+    (set, get) => {
+      let verificationPollingInterval: NodeJS.Timeout | null = null;
+      let authStateUnsubscribe: (() => void) | null = null;
 
-      login: async (email: string, password: string) => {
-        set({ loading: true, error: null })
-        
-        try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          
-          // Check for admin login
-          if (email === 'admin@trustytrade.com' && password === 'admin123') {
-            const adminUser = createMockUser('Admin', email)
-            adminUser.role = 'admin'
-            set({ 
-              user: adminUser,
-              isAuthenticated: true,
-              loading: false 
-            })
-            return
-          }
-          
-          // Regular user login
-          if (email && password.length >= 4) {
-            const user = createMockUser(email.split('@')[0], email)
-            set({ 
-              user,
-              isAuthenticated: true,
-              loading: false 
-            })
-          } else {
-            throw new Error('Invalid credentials')
-          }
-        } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Login failed',
-            loading: false 
-          })
-          throw error
-        }
-      },
+      return {
+        user: null,
+        isAuthenticated: false,
+        loading: false,
+        error: null,
+        redirectIntent: { type: 'none' },
+        emailVerificationRequired: false,
 
-      register: async (name: string, email: string, password: string) => {
-        set({ loading: true, error: null })
-        
-        try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1500))
+        initializeAuth: async () => {
+          set({ loading: true })
+          try {
+            // Set up auth state listener
+            authStateUnsubscribe = firebaseAuthService.onAuthStateChanged((user) => {
+              set({ 
+                user,
+                isAuthenticated: !!user,
+                emailVerificationRequired: user ? user.verificationStatus !== 'verified' : false,
+                loading: false 
+              });
+            });
+          } catch (error) {
+            set({ loading: false })
+          }
+        },
+
+        login: async (email: string, password: string) => {
+          set({ loading: true, error: null })
           
-          if (name && email && password.length >= 4) {
-            const user = createMockUser(name, email)
+          try {
+            const user = await firebaseAuthService.login(email, password)
+            const emailVerified = await firebaseAuthService.isEmailVerified()
+            
             set({ 
               user,
               isAuthenticated: true,
+              emailVerificationRequired: !emailVerified,
               loading: false 
             })
-          } else {
-            throw new Error('Please fill all fields correctly')
-          }
-        } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Registration failed',
-            loading: false 
-          })
-          throw error
-        }
-      },
 
-      logout: () => {
-        set({ 
-          user: null,
-          isAuthenticated: false,
-          error: null,
-          redirectIntent: { type: 'none' }
-        })
-      },
-
-      setUser: (user: User | null) => {
-        set({ 
-          user,
-          isAuthenticated: !!user 
-        })
-      },
-
-      updateProfile: async (updates: Partial<User>) => {
-        set({ loading: true, error: null })
-        
-        try {
-          await new Promise(resolve => setTimeout(resolve, 500))
-          
-          const { user } = get()
-          if (user) {
-            const updatedUser = { ...user, ...updates }
+            // Start polling for email verification if needed
+            if (!emailVerified) {
+              get().startEmailVerificationPolling();
+            }
+          } catch (error) {
             set({ 
-              user: updatedUser,
+              error: error instanceof Error ? error.message : 'Login failed',
+              loading: false 
+            })
+            throw error
+          }
+        },
+
+        register: async (name: string, email: string, password: string) => {
+          set({ loading: true, error: null })
+          
+          try {
+            const user = await firebaseAuthService.register(name, email, password)
+            
+            set({ 
+              user,
+              isAuthenticated: true,
+              emailVerificationRequired: true, // Always true for new registrations
+              loading: false 
+            })
+
+            // Start polling for email verification
+            get().startEmailVerificationPolling();
+          } catch (error) {
+            set({ 
+              error: error instanceof Error ? error.message : 'Registration failed',
+              loading: false 
+            })
+            throw error
+          }
+        },
+
+        logout: async () => {
+          set({ loading: true })
+          try {
+            // Stop polling and cleanup
+            get().stopEmailVerificationPolling();
+            if (authStateUnsubscribe) {
+              authStateUnsubscribe();
+              authStateUnsubscribe = null;
+            }
+
+            await firebaseAuthService.logout()
+            set({ 
+              user: null,
+              isAuthenticated: false,
+              emailVerificationRequired: false,
+              error: null,
+              redirectIntent: { type: 'none' },
+              loading: false
+            })
+          } catch (error) {
+            set({ 
+              error: error instanceof Error ? error.message : 'Logout failed',
               loading: false 
             })
           }
-        } catch (error) {
+        },
+
+        setUser: (user: User | null) => {
           set({ 
-            error: error instanceof Error ? error.message : 'Profile update failed',
-            loading: false 
+            user,
+            isAuthenticated: !!user,
+            emailVerificationRequired: user ? user.verificationStatus !== 'verified' : false
           })
-          throw error
+        },
+
+        updateProfile: async (updates: Partial<User> & { phone?: string }) => {
+          set({ loading: true, error: null })
+          
+          try {
+            await firebaseAuthService.updateProfile(updates)
+            
+            const { user } = get()
+            if (user) {
+              const updatedUser = { ...user, ...updates }
+              set({ 
+                user: updatedUser,
+                emailVerificationRequired: updates.email ? true : get().emailVerificationRequired,
+                loading: false 
+              })
+
+              // Start polling if email was changed
+              if (updates.email) {
+                get().startEmailVerificationPolling();
+              }
+            }
+          } catch (error) {
+            set({ 
+              error: error instanceof Error ? error.message : 'Profile update failed',
+              loading: false 
+            })
+            throw error
+          }
+        },
+
+        changePassword: async (currentPassword: string, newPassword: string) => {
+          set({ loading: true, error: null })
+          try {
+            await firebaseAuthService.changePassword(currentPassword, newPassword)
+            set({ loading: false })
+          } catch (error) {
+            set({ 
+              error: error instanceof Error ? error.message : 'Password change failed',
+              loading: false 
+            })
+            throw error
+          }
+        },
+
+        resetPassword: async (email: string) => {
+          set({ loading: true, error: null })
+          try {
+            await firebaseAuthService.resetPassword(email)
+            set({ loading: false })
+          } catch (error) {
+            set({ 
+              error: error instanceof Error ? error.message : 'Password reset failed',
+              loading: false 
+            })
+            throw error
+          }
+        },
+
+        resendVerificationEmail: async () => {
+          set({ loading: true, error: null })
+          try {
+            await firebaseAuthService.resendVerificationEmail()
+            set({ loading: false })
+          } catch (error) {
+            set({ 
+              error: error instanceof Error ? error.message : 'Failed to resend verification email',
+              loading: false 
+            })
+            throw error
+          }
+        },
+
+        checkEmailVerification: async () => {
+          try {
+            const verified = await firebaseAuthService.checkAndUpdateEmailVerification()
+            set({ emailVerificationRequired: !verified })
+            
+            if (verified) {
+              // Stop polling when verified
+              get().stopEmailVerificationPolling();
+              
+              // Update user verification status
+              const { user } = get();
+              if (user) {
+                set({ 
+                  user: { ...user, verificationStatus: 'verified' }
+                });
+              }
+            }
+            
+            return verified
+          } catch (error) {
+            console.error('Error checking email verification:', error);
+            return false;
+          }
+        },
+
+        startEmailVerificationPolling: () => {
+          // Clear existing interval
+          if (verificationPollingInterval) {
+            clearInterval(verificationPollingInterval);
+          }
+
+          // Poll every 3 seconds for email verification
+          verificationPollingInterval = setInterval(async () => {
+            const verified = await get().checkEmailVerification();
+            if (verified) {
+              get().stopEmailVerificationPolling();
+            }
+          }, 3000);
+        },
+
+        stopEmailVerificationPolling: () => {
+          if (verificationPollingInterval) {
+            clearInterval(verificationPollingInterval);
+            verificationPollingInterval = null;
+          }
+        },
+
+        setRedirectIntent: (intent: RedirectIntent) => {
+          set({ redirectIntent: intent })
+        },
+
+        clearRedirectIntent: () => {
+          set({ redirectIntent: { type: 'none' } })
         }
-      },
-
-      setRedirectIntent: (intent: RedirectIntent) => {
-        set({ redirectIntent: intent })
-      },
-
-      clearRedirectIntent: () => {
-        set({ redirectIntent: { type: 'none' } })
       }
-    }),
+    },
     {
       name: 'auth-storage',
       partialize: (state) => ({ 
         user: state.user,
-        isAuthenticated: state.isAuthenticated 
+        isAuthenticated: state.isAuthenticated,
+        redirectIntent: state.redirectIntent
       })
     }
   )

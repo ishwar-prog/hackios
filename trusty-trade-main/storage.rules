@@ -1,0 +1,55 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isValidImageFile() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 5 * 1024 * 1024; // 5MB limit
+    }
+
+    // Product images - sellers can upload, anyone can read
+    match /products/{productId}/{imageId} {
+      // Anyone can read product images
+      allow read: if true;
+      
+      // Only authenticated users can upload product images
+      allow write: if isAuthenticated() && isValidImageFile();
+      
+      // Only the uploader can delete their images
+      allow delete: if isAuthenticated();
+    }
+
+    // Verification images - only buyers and admins
+    match /verifications/{orderId}/{imageId} {
+      // Only authenticated users can read verification images
+      allow read: if isAuthenticated();
+      
+      // Only authenticated users can upload verification images
+      allow write: if isAuthenticated() && isValidImageFile();
+      
+      // Only the uploader can delete their images
+      allow delete: if isAuthenticated();
+    }
+
+    // Dispute evidence - only involved parties and admins
+    match /disputes/{disputeId}/{imageId} {
+      // Only authenticated users can read dispute images
+      allow read: if isAuthenticated();
+      
+      // Only authenticated users can upload dispute images
+      allow write: if isAuthenticated() && isValidImageFile();
+      
+      // Only the uploader can delete their images
+      allow delete: if isAuthenticated();
+    }
+
+    // Deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

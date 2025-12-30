@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Header } from './Header';
 import { TrustBanner } from './TrustBanner';
+import { EmailVerificationBanner } from '@/components/shared/EmailVerificationBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,6 +13,7 @@ export const Layout = ({ children, showTrustBanner = true }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <EmailVerificationBanner />
       {showTrustBanner && <TrustBanner />}
       <main>{children}</main>
       <footer className="border-t border-border bg-card mt-16">
