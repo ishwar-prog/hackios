@@ -216,7 +216,15 @@ export const useProductStore = create<ProductStore>()(
     {
       name: 'product-storage',
       partialize: (state) => ({
-        products: state.products
+        // Store products but replace large base64 images with placeholder
+        // to avoid localStorage size limit errors
+        products: state.products.map(p => ({
+          ...p,
+          // Keep only the first image if it's a URL, otherwise use placeholder
+          image: p.image?.startsWith('data:') ? '/placeholder.svg' : p.image,
+          // Don't persist base64 images array - only keep URL-based images
+          images: p.images?.filter(img => !img.startsWith('data:')) || []
+        }))
       })
     }
   )

@@ -12,6 +12,7 @@ import { useNotificationStore } from '@/store/useNotificationStore';
 import { useDraftProductStore } from '@/store/useDraftProductStore';
 import { useToast } from '@/hooks/use-toast';
 import { firestoreService } from '@/services/firestoreService';
+import { compressImage } from '@/lib/imageCompression';
 import { Upload, X, Camera, Shield, CheckCircle2, AlertCircle, Package, IndianRupee, LogIn } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
@@ -71,14 +72,29 @@ const Sell = () => {
     }
   }, []);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => setImages(prev => [...prev, reader.result as string]);
-      reader.readAsDataURL(file);
-    });
+    
+    // Process files with compression to avoid localStorage size limits
+    for (const file of Array.from(files)) {
+      try {
+        // Compress image to max 800x800 at 70% quality (~50-100KB each)
+        const compressedImage = await compressImage(file, {
+          maxWidth: 800,
+          maxHeight: 800,
+          quality: 0.7
+        });
+        setImages(prev => [...prev, compressedImage]);
+      } catch (error) {
+        console.error('Image compression failed:', error);
+        toast({
+          title: "Image Upload Failed",
+          description: "Could not process the image. Please try a different file.",
+          variant: "destructive"
+        });
+      }
+    }
   };
 
   const removeImage = (index: number) => setImages(prev => prev.filter((_, i) => i !== index));

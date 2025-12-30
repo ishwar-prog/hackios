@@ -32,7 +32,13 @@ export const useDraftProductStore = create<DraftProductStore>()(
       }
     }),
     {
-      name: 'draft-product-storage'
+      name: 'draft-product-storage',
+      // Only persist form data, NOT images - images are too large for localStorage
+      // Images will be kept in memory only and user will need to re-upload after page refresh
+      partialize: (state) => ({
+        draft: state.draft,
+        images: [] // Don't persist images to avoid localStorage size limit errors
+      })
     }
   )
 )
