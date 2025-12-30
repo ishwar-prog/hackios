@@ -425,7 +425,7 @@ const Login = () => {
 
           <div className="mt-4 p-3 bg-muted rounded-lg">
             <p className="text-xs text-muted-foreground text-center">
-              Demo Admin: admin@reboxed.in / admin123
+              Demo Admin: admin@trustytrade.com.in / admin123
             </p>
           </div>
         </div>
