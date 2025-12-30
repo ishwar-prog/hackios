@@ -31,10 +31,7 @@ const presetAmounts = [100, 500, 1000, 2000] as const;
 
 const Wallet = () => {
   const { toast } = useToast();
-  const balance = useWalletStore(state => state.balance);
-  const status = useWalletStore(state => state.status);
-  const transactions = useWalletStore(state => state.transactions);
-  const addMoney = useWalletStore(state => state.addMoney);
+  const { availableBalance, heldInEscrow, walletState, transactions, addMoney, getTotalBalance } = useWalletStore();
   const { addNotification } = useNotificationStore();
   
   const [isAddingMoney, setIsAddingMoney] = useState(false);
@@ -45,19 +42,17 @@ const Wallet = () => {
   // Memoize computed stats to prevent recalculation on every render
   const stats = useMemo(() => {
     const totalAdded = transactions
-      .filter(t => t.type === 'credit')
+      .filter(t => t.type === 'WALLET_CREDIT')
       .reduce((sum, t) => sum + t.amount, 0);
     
     const totalSpent = transactions
-      .filter(t => t.type === 'debit')
+      .filter(t => t.type === 'ESCROW_HOLD')
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const inEscrow = transactions
-      .filter(t => t.type === 'escrow_hold')
-      .reduce((sum, t) => sum + t.amount, 0);
+    const totalBalance = getTotalBalance();
     
-    return { totalAdded, totalSpent, inEscrow };
-  }, [transactions]);
+    return { totalAdded, totalSpent, totalBalance };
+  }, [transactions, getTotalBalance]);
 
   const handleAddMoney = useCallback(async () => {
     const numAmount = Number(amount);
@@ -90,13 +85,13 @@ const Wallet = () => {
     addNotification({
       type: 'wallet',
       title: 'Money Added Successfully',
-      message: `$${numAmount} has been added to your wallet via ${methodName}.`,
+      message: `₹${numAmount.toLocaleString('en-IN')} has been added to your wallet via ${methodName}.`,
       priority: 'medium'
     });
 
     toast({
       title: "Money Added!",
-      description: `$${numAmount} has been added to your wallet.`,
+      description: `₹${numAmount.toLocaleString('en-IN')} has been added to your wallet.`,
     });
 
     setIsProcessing(false);
@@ -128,11 +123,16 @@ const Wallet = () => {
           <div className="flex items-start justify-between mb-6">
             <div>
               <p className="text-white/80 text-sm mb-1">Available Balance</p>
-              <p className="text-4xl font-bold">${balance.toLocaleString()}</p>
+              <p className="text-4xl font-bold">₹{availableBalance.toLocaleString('en-IN')}</p>
+              {heldInEscrow > 0 && (
+                <p className="text-white/60 text-sm mt-2">
+                  + ₹{heldInEscrow.toLocaleString('en-IN')} held in escrow
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <WalletIcon className="h-8 w-8 text-white/80" />
-              <StatusBadge status={status} />
+              <StatusBadge status={walletState} />
             </div>
           </div>
           
@@ -142,7 +142,7 @@ const Wallet = () => {
                 variant="secondary" 
                 size="lg"
                 className="bg-white/20 hover:bg-white/30 text-white border-0"
-                disabled={status === 'FROZEN'}
+                disabled={walletState === 'FROZEN'}
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Add Money
@@ -160,7 +160,7 @@ const Wallet = () => {
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">Amount</label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
                     <Input
                       type="number"
                       placeholder="Enter amount"
@@ -177,7 +177,7 @@ const Wallet = () => {
                         size="sm"
                         onClick={() => setAmount(String(preset))}
                       >
-                        ${preset}
+                        ₹{preset}
                       </Button>
                     ))}
                   </div>
@@ -217,7 +217,7 @@ const Wallet = () => {
                   ) : (
                     <>
                       <Plus className="h-5 w-5 mr-2" />
-                      Add ${amount || '0'}
+                      Add ₹{amount || '0'}
                     </>
                   )}
                 </Button>
@@ -227,27 +227,27 @@ const Wallet = () => {
         </div>
 
         {/* Status Warning */}
-        {status !== 'ACTIVE' && <StatusWarning status={status} />}
+        {walletState !== 'ACTIVE' && <StatusWarning status={walletState} />}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <StatCard
             icon={<ArrowDownLeft className="h-5 w-5 text-success" />}
             iconBg="bg-success/10"
-            label="Total Added"
-            value={stats.totalAdded}
+            label="Available Balance"
+            value={availableBalance}
           />
           <StatCard
-            icon={<ArrowUpRight className="h-5 w-5 text-destructive" />}
-            iconBg="bg-destructive/10"
-            label="Total Spent"
-            value={stats.totalSpent}
+            icon={<Shield className="h-5 w-5 text-warning" />}
+            iconBg="bg-warning/10"
+            label="Held in Escrow"
+            value={heldInEscrow}
           />
           <StatCard
-            icon={<Shield className="h-5 w-5 text-primary" />}
+            icon={<ArrowUpRight className="h-5 w-5 text-primary" />}
             iconBg="bg-primary/10"
-            label="In Escrow"
-            value={stats.inEscrow}
+            label="Total Balance"
+            value={stats.totalBalance}
           />
         </div>
 
@@ -265,7 +265,7 @@ const Wallet = () => {
               </div>
             ) : (
               transactions.map(transaction => (
-                <TransactionRow key={transaction.id} transaction={transaction} />
+                <TransactionRow key={transaction.transactionId} transaction={transaction} />
               ))
             )}
           </div>
@@ -325,37 +325,39 @@ const StatCard = ({ icon, iconBg, label, value }: {
       </div>
       <span className="text-sm text-muted-foreground">{label}</span>
     </div>
-    <p className="text-2xl font-bold text-foreground">${value.toLocaleString()}</p>
+    <p className="text-2xl font-bold text-foreground">₹{value.toLocaleString('en-IN')}</p>
   </div>
 );
 
 const TransactionRow = ({ transaction }: { transaction: { 
-  id: string; 
+  transactionId: string; 
   type: string; 
   description: string; 
   timestamp: string; 
   orderId?: string; 
   amount: number; 
-  balanceAfter: number 
+  from: string;
+  to: string;
 }}) => {
   const icon = useMemo(() => {
     switch (transaction.type) {
-      case 'credit':
-      case 'refund':
+      case 'WALLET_CREDIT':
         return <ArrowDownLeft className="h-4 w-4 text-success" />;
-      case 'debit':
+      case 'WALLET_DEBIT':
         return <ArrowUpRight className="h-4 w-4 text-destructive" />;
-      case 'escrow_hold':
+      case 'ESCROW_HOLD':
         return <Shield className="h-4 w-4 text-warning" />;
-      case 'escrow_release':
+      case 'ESCROW_RELEASE':
         return <CheckCircle2 className="h-4 w-4 text-primary" />;
+      case 'ESCROW_REFUND':
+        return <ArrowDownLeft className="h-4 w-4 text-success" />;
       default:
         return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
   }, [transaction.type]);
 
-  const isPositive = transaction.type === 'credit' || transaction.type === 'refund';
-  const isNegative = transaction.type === 'debit';
+  const isPositive = ['WALLET_CREDIT', 'ESCROW_REFUND'].includes(transaction.type);
+  const isNegative = ['WALLET_DEBIT', 'ESCROW_HOLD'].includes(transaction.type);
 
   return (
     <div className="p-5 flex items-center justify-between">
@@ -369,16 +371,16 @@ const TransactionRow = ({ transaction }: { transaction: {
             {new Date(transaction.timestamp).toLocaleDateString()}
             {transaction.orderId && ` • Order: ${transaction.orderId}`}
           </p>
+          <p className="text-xs text-muted-foreground">
+            {transaction.from} → {transaction.to}
+          </p>
         </div>
       </div>
       <div className="text-right">
         <p className={`font-semibold ${
           isPositive ? 'text-success' : isNegative ? 'text-destructive' : 'text-foreground'
         }`}>
-          {isPositive ? '+' : '-'}${transaction.amount.toLocaleString()}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Balance: ${transaction.balanceAfter.toLocaleString()}
+          {isPositive ? '+' : isNegative ? '-' : ''}₹{transaction.amount.toLocaleString('en-IN')}
         </p>
       </div>
     </div>

@@ -75,7 +75,7 @@ class AuthService {
   async adminLogin(email: string, password: string): Promise<AuthResult> {
     await this.simulateNetworkDelay();
 
-    const ADMIN_EMAIL = 'admin@trustytrade.com';
+    const ADMIN_EMAIL = 'admin@reboxed.in';
     const ADMIN_PASSWORD = 'admin123';
 
     if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {

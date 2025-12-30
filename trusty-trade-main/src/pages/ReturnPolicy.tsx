@@ -14,7 +14,7 @@ const ReturnPolicy = () => {
           <h1 className="text-3xl font-bold text-foreground mb-4">Return Policy</h1>
           <p className="text-lg text-muted-foreground">
             Our return policy is designed to protect buyers while being fair to sellers. 
-            Here's everything you need to know about returns on Trusty Trade.
+            Here's everything you need to know about returns on ReBoxed.
           </p>
         </div>
 

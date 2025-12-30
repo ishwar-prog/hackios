@@ -30,10 +30,10 @@ const Checkout = () => {
   
   const { getProduct, deleteProduct } = useProductStore();
   const { formatPrice } = useCurrencyStore();
-  const { createOrder } = useOrderStore();
+  const { createOrderWithEscrow } = useOrderStore();
   const { createEscrowAccount } = useEscrowStore();
   const { isAuthenticated, user, setRedirectIntent } = useAuthStore();
-  const { balance, debitForPurchase } = useWalletStore();
+  const { availableBalance, heldInEscrow, walletState } = useWalletStore();
   const { notifyOrderPlaced, notifyPaymentSuccess, notifyEscrowHeld } = useNotificationStore();
   
   const product = id ? getProduct(id) : null;
@@ -98,7 +98,8 @@ const Checkout = () => {
 
   const serviceFee = paymentService.calculateServiceFee(product.price);
   const total = paymentService.calculateTotal(product.price);
-  const hasInsufficientBalance = balance < total;
+  const hasInsufficientBalance = availableBalance < total;
+  const isWalletFrozen = walletState === 'FROZEN';
 
   // Validate numeric inputs
   const validateForm = (): boolean => {
@@ -159,11 +160,20 @@ const Checkout = () => {
       return;
     }
 
-    // Check wallet balance
+    // Check wallet balance and state
+    if (isWalletFrozen) {
+      toast({
+        title: "Wallet Frozen",
+        description: "Your wallet has been frozen. Please contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (hasInsufficientBalance) {
       toast({
         title: "Insufficient Balance",
-        description: `You need ₹${total.toLocaleString()} but have ₹${balance.toLocaleString()}. Please add funds to your wallet.`,
+        description: `You need ₹${total.toLocaleString()} but have ₹${availableBalance.toLocaleString()}. Please add funds to your wallet.`,
         variant: "destructive",
       });
       return;
@@ -171,27 +181,16 @@ const Checkout = () => {
     
     setIsProcessing(true);
     try {
-      // Create order first
-      const order = await createOrder(product.id, total);
+      // Create order with escrow authorization (mirrors Stripe PaymentIntent)
+      const order = await createOrderWithEscrow(product.id, total);
       
-      // Process wallet payment
-      const paymentSuccess = debitForPurchase(total, order.id, product.name);
-      
-      if (!paymentSuccess) {
-        throw new Error('Payment failed');
-      }
-      
-      // Create escrow account
-      createEscrowAccount(order.id, total);
+      // Create escrow account for tracking
+      createEscrowAccount(order.orderId, total);
       
       // Remove product from browse (post-purchase)
       deleteProduct(product.id);
       
-      // Trigger notifications
-      notifyOrderPlaced(order.id, product.name, total);
-      notifyPaymentSuccess(order.id, total);
-      notifyEscrowHeld(order.id, total);
-      
+      // Show SUCCESS toast - only reached if all operations succeeded
       toast({
         title: "Payment Secured!",
         description: "Your funds are now held in escrow. The seller has been notified.",
@@ -199,9 +198,11 @@ const Checkout = () => {
       
       navigate('/orders');
     } catch (error) {
+      console.error('Payment processing error:', error);
+      // Show ERROR toast only on actual failure
       toast({
         title: "Payment Failed",
-        description: "There was an error processing your payment. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error processing your payment. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -265,36 +266,52 @@ const Checkout = () => {
               <h2 className="font-semibold text-foreground mb-4">Payment Method</h2>
               
               {/* Wallet Balance Display */}
-              <div className={`flex items-center gap-3 p-4 rounded-lg border-2 ${hasInsufficientBalance ? 'border-destructive bg-destructive/5' : 'border-primary bg-primary/5'}`}>
-                <Wallet className={`h-6 w-6 ${hasInsufficientBalance ? 'text-destructive' : 'text-primary'}`} />
+              <div className={`flex items-center gap-3 p-4 rounded-lg border-2 ${hasInsufficientBalance || isWalletFrozen ? 'border-destructive bg-destructive/5' : 'border-primary bg-primary/5'}`}>
+                <Wallet className={`h-6 w-6 ${hasInsufficientBalance || isWalletFrozen ? 'text-destructive' : 'text-primary'}`} />
                 <div className="flex-1">
-                  <p className="font-medium text-foreground">Wallet Balance</p>
+                  <p className="font-medium text-foreground">Available Balance</p>
                   <p className={`text-lg font-bold ${hasInsufficientBalance ? 'text-destructive' : 'text-success'}`}>
-                    {formatPrice(balance)}
+                    {formatPrice(availableBalance)}
                   </p>
+                  {heldInEscrow > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      ₹{heldInEscrow.toLocaleString()} held in escrow
+                    </p>
+                  )}
                 </div>
-                {!hasInsufficientBalance && (
+                {!hasInsufficientBalance && !isWalletFrozen && (
                   <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
                     <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                   </div>
                 )}
               </div>
 
-              {hasInsufficientBalance && (
+              {(hasInsufficientBalance || isWalletFrozen) && (
                 <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                   <div className="flex items-start gap-3">
                     <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                     <div>
-                      <p className="font-medium text-destructive">Insufficient Balance</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        You need {formatPrice(total)} but have {formatPrice(balance)}. 
-                        Please add {formatPrice(total - balance)} to your wallet.
-                      </p>
-                      <Link to="/wallet">
-                        <Button variant="outline" size="sm" className="mt-3">
-                          Add Funds to Wallet
-                        </Button>
-                      </Link>
+                      {isWalletFrozen ? (
+                        <>
+                          <p className="font-medium text-destructive">Wallet Frozen</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Your wallet has been frozen by admin. Please contact support.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-destructive">Insufficient Balance</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            You need {formatPrice(total)} but have {formatPrice(availableBalance)}. 
+                            Please add {formatPrice(total - availableBalance)} to your wallet.
+                          </p>
+                          <Link to="/wallet">
+                            <Button variant="outline" size="sm" className="mt-3">
+                              Add Funds to Wallet
+                            </Button>
+                          </Link>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -378,8 +395,8 @@ const Checkout = () => {
               </div>
             </div>
 
-            <Button size="xl" variant="trust" className="w-full" onClick={handlePayment} disabled={isProcessing || hasInsufficientBalance}>
-              {isProcessing ? (<><div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />Processing...</>) : hasInsufficientBalance ? (<><AlertCircle className="h-5 w-5" />Insufficient Wallet Balance</>) : (<><Wallet className="h-5 w-5" />Pay {formatPrice(total)} from Wallet</>)}
+            <Button size="xl" variant="trust" className="w-full" onClick={handlePayment} disabled={isProcessing || hasInsufficientBalance || isWalletFrozen}>
+              {isProcessing ? (<><div className="h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />Processing...</>) : (hasInsufficientBalance || isWalletFrozen) ? (<><AlertCircle className="h-5 w-5" />{isWalletFrozen ? 'Wallet Frozen' : 'Insufficient Balance'}</>) : (<><Wallet className="h-5 w-5" />Pay {formatPrice(total)} from Wallet</>)}
             </Button>
           </div>
 

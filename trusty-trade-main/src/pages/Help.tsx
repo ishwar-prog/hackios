@@ -43,8 +43,8 @@ const supportPhoneNumbers = [
   { label: 'Order Issues', number: '+919876543212' },
 ];
 
-const SUPPORT_EMAIL = 'support@trustytrade.com';
-const EMAIL_SUBJECT = 'Support Request - Trusty Trade';
+const SUPPORT_EMAIL = 'support@reboxed.in';
+const EMAIL_SUBJECT = 'Support Request - ReBoxed';
 
 const Help = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,7 +52,7 @@ const Help = () => {
   const [chatOpen, setChatOpen] = useState(false);
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', text: 'Hello! Welcome to Trusty Trade support. How can I help you today?', sender: 'support', timestamp: new Date() }
+    { id: '1', text: 'Hello! Welcome to ReBoxed support. How can I help you today?', sender: 'support', timestamp: new Date() }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -176,7 +176,7 @@ const Help = () => {
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Response within 4 hours</span>
               <Button variant="outline" size="sm" asChild>
-                <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(EMAIL_SUBJECT)}&body=${encodeURIComponent('Hi Trusty Trade Support,\n\nI need help with:\n\n')}`}>
+                <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(EMAIL_SUBJECT)}&body=${encodeURIComponent('Hi ReBoxed Support,\n\nI need help with:\n\n')}`}>
                   Send Email
                 </a>
               </Button>

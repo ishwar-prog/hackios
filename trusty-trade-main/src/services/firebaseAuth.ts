@@ -17,7 +17,7 @@ import { auth, db } from '@/lib/firebase';
 import type { User } from '@/store/useAuthStore';
 
 // Admin email whitelist
-const ADMIN_EMAILS = ['admin@trustytrade.com'];
+const ADMIN_EMAILS = ['admin@reboxed.in'];
 
 export interface FirebaseUserProfile {
   uid: string;

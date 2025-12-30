@@ -51,7 +51,7 @@ const Login = () => {
     // Check if user is admin
     if (user?.role === 'admin') {
       // Also authenticate with admin store for backward compatibility
-      adminLogin('admin@trustytrade.com', 'admin123');
+      adminLogin('admin@reboxed.in', 'admin123');
       toast({ title: "Welcome, Admin!", description: "Redirecting to admin dashboard..." });
       navigate('/admin/dashboard');
       return;
@@ -196,7 +196,7 @@ const Login = () => {
       case 'sell':
         return 'Sign in to list your product';
       default:
-        return isSignUp ? 'Join Trusty Trade today' : 'Sign in to your account';
+        return isSignUp ? 'Join ReBoxed today' : 'Sign in to your account';
     }
   };
 
@@ -425,7 +425,7 @@ const Login = () => {
 
           <div className="mt-4 p-3 bg-muted rounded-lg">
             <p className="text-xs text-muted-foreground text-center">
-              Demo Admin: admin@trustytrade.com / admin123
+              Demo Admin: admin@reboxed.in / admin123
             </p>
           </div>
         </div>

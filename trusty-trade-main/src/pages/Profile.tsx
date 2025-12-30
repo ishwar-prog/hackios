@@ -244,7 +244,7 @@ const Profile = () => {
                     </Badge>
                   </div>
                   <p className="text-muted-foreground mb-4">
-                    Trusty Trade {profileData.role} since {profileData.joinDate.toLocaleDateString()}
+                    ReBoxed {profileData.role} since {profileData.joinDate.toLocaleDateString()}
                   </p>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">

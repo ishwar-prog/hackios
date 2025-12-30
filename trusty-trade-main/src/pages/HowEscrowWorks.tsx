@@ -53,7 +53,7 @@ const HowEscrowWorks = () => {
           <h1 className="text-3xl font-bold text-foreground mb-4">How Escrow Works</h1>
           <p className="text-lg text-muted-foreground">
             Escrow is a financial arrangement where a third party holds and regulates payment 
-            until both parties fulfill their obligations. Here's how it protects you on Trusty Trade.
+            until both parties fulfill their obligations. Here's how it protects you on ReBoxed.
           </p>
         </div>
 

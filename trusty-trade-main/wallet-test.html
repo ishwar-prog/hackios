@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wallet Test</title>
+</head>
+<body>
+    <h1>Wallet Functionality Test</h1>
+    <p>Open browser console and navigate to the app to test:</p>
+    <ol>
+        <li>Login as a regular user</li>
+        <li>Check wallet balance on multiple pages</li>
+        <li>Try adding money to wallet</li>
+        <li>Verify balance updates correctly</li>
+        <li>Switch users and verify wallet isolation</li>
+    </ol>
+    
+    <h2>Expected Behavior:</h2>
+    <ul>
+        <li>Each user should have their own wallet with $5000 initial balance</li>
+        <li>Adding money should immediately update the balance</li>
+        <li>Balance should be consistent across all pages</li>
+        <li>Switching users should show different wallet data</li>
+    </ul>
+    
+    <h2>Debug Info:</h2>
+    <p>Check localStorage for 'wallet-storage' key to see persisted data</p>
+    <p>App running at: <a href="http://localhost:8082" target="_blank">http://localhost:8082</a></p>
+</body>
+</html>

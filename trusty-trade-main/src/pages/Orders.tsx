@@ -21,10 +21,13 @@ const Orders = () => {
     ? orders.filter(order => order.buyerId === user?.id)
     : [];
   
-  // Filter orders by status
+  // Filter orders by status (handle both uppercase and lowercase)
   const filteredOrders = statusFilter === 'all' 
     ? userOrders 
-    : userOrders.filter(order => order.status === statusFilter);
+    : userOrders.filter(order => 
+        order.status === statusFilter || 
+        order.status === statusFilter.toUpperCase()
+      );
 
   const handleVerify = async (orderId: string) => {
     try {
@@ -40,11 +43,11 @@ const Orders = () => {
 
   const statusOptions: { value: OrderStatus | 'all'; label: string; count: number }[] = [
     { value: 'all', label: 'All Orders', count: userOrders.length },
-    { value: 'paid', label: 'Paid', count: userOrders.filter(o => o.status === 'paid').length },
-    { value: 'shipped', label: 'Shipped', count: userOrders.filter(o => o.status === 'shipped').length },
-    { value: 'delivered', label: 'Delivered', count: userOrders.filter(o => o.status === 'delivered').length },
-    { value: 'verified', label: 'Verified', count: userOrders.filter(o => o.status === 'verified').length },
-    { value: 'disputed', label: 'Disputed', count: userOrders.filter(o => o.status === 'disputed').length },
+    { value: 'paid', label: 'Paid', count: userOrders.filter(o => o.status === 'paid' || o.status === 'PAID').length },
+    { value: 'shipped', label: 'Shipped', count: userOrders.filter(o => o.status === 'shipped' || o.status === 'SHIPPED').length },
+    { value: 'delivered', label: 'Delivered', count: userOrders.filter(o => o.status === 'delivered' || o.status === 'DELIVERED').length },
+    { value: 'verified', label: 'Verified', count: userOrders.filter(o => o.status === 'verified' || o.status === 'VERIFIED').length },
+    { value: 'disputed', label: 'Disputed', count: userOrders.filter(o => o.status === 'disputed' || o.status === 'DISPUTED').length },
   ];
 
   // Note: Auth guard is handled at route level via AuthGuard component

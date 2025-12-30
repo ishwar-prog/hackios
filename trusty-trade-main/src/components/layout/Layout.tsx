@@ -43,7 +43,7 @@ export const Layout = ({ children, showTrustBanner = true }: LayoutProps) => {
                 <li><Link to="/help" className="hover:text-foreground transition-colors">Help Center</Link></li>
                 <li>
                   <a 
-                    href="mailto:support@trustytrade.com?subject=Support%20Request&body=Hi%20Trusty%20Trade%20Support,%0A%0A" 
+                    href="mailto:support@reboxed.in?subject=Support%20Request&body=Hi%20ReBoxed%20Support,%0A%0A" 
                     className="hover:text-foreground transition-colors"
                   >
                     Contact Us
@@ -56,7 +56,7 @@ export const Layout = ({ children, showTrustBanner = true }: LayoutProps) => {
             <div>
               <h4 className="font-semibold text-foreground mb-3">Company</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link to="/nav" className="hover:text-foreground transition-colors">About Trusty Trade</Link></li>
+                <li><Link to="/nav" className="hover:text-foreground transition-colors">About ReBoxed</Link></li>
                 <li><Link to="/buyer-protection" className="hover:text-foreground transition-colors">Trust & Safety</Link></li>
                 <li><Link to="/marketplace-rules" className="hover:text-foreground transition-colors">Terms of Service</Link></li>
                 <li><Link to="/admin" className="hover:text-foreground transition-colors">Admin Portal</Link></li>
@@ -64,7 +64,7 @@ export const Layout = ({ children, showTrustBanner = true }: LayoutProps) => {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            © 2024 Trusty Trade. Your money is protected until you're satisfied.
+            © 2024 ReBoxed. Your money is protected until you're satisfied.
           </div>
         </div>
       </footer>

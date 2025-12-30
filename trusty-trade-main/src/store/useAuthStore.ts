@@ -61,10 +61,13 @@ export const useAuthStore = create<AuthStore>()(
           try {
             // Set up auth state listener
             authStateUnsubscribe = firebaseAuthService.onAuthStateChanged((user) => {
+              // Check if user is admin - admins bypass email verification completely
+              const isAdmin = user?.role === 'admin';
+              
               set({ 
                 user,
                 isAuthenticated: !!user,
-                emailVerificationRequired: user ? user.verificationStatus !== 'verified' : false,
+                emailVerificationRequired: user && !isAdmin ? user.verificationStatus !== 'verified' : false,
                 loading: false 
               });
             });
@@ -80,15 +83,18 @@ export const useAuthStore = create<AuthStore>()(
             const user = await firebaseAuthService.login(email, password)
             const emailVerified = await firebaseAuthService.isEmailVerified()
             
+            // Check if user is admin - admins bypass email verification completely
+            const isAdmin = user?.role === 'admin';
+            
             set({ 
               user,
               isAuthenticated: true,
-              emailVerificationRequired: !emailVerified,
+              emailVerificationRequired: !isAdmin && !emailVerified,
               loading: false 
             })
 
-            // Start polling for email verification if needed
-            if (!emailVerified) {
+            // Start polling for email verification if needed (not for admins)
+            if (!isAdmin && !emailVerified) {
               get().startEmailVerificationPolling();
             }
           } catch (error) {
@@ -152,10 +158,13 @@ export const useAuthStore = create<AuthStore>()(
         },
 
         setUser: (user: User | null) => {
+          // Check if user is admin - admins bypass email verification completely
+          const isAdmin = user?.role === 'admin';
+          
           set({ 
             user,
             isAuthenticated: !!user,
-            emailVerificationRequired: user ? user.verificationStatus !== 'verified' : false
+            emailVerificationRequired: user && !isAdmin ? user.verificationStatus !== 'verified' : false
           })
         },
 

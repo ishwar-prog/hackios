@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { useAdminStore, type DisputeCase, type WalletControl, type UserReport, type AdminMessage } from '@/store/useAdminStore';
 import { useProductStore } from '@/store/useProductStore';
 import { useToast } from '@/hooks/use-toast';
+import { firestoreService, type FirestoreOrder } from '@/services/firestoreService';
+import { EscrowControls } from '@/components/admin/EscrowControls';
 import {
   Shield, LogOut, AlertTriangle, Users, FileWarning, Wallet,
   CheckCircle2, XCircle, Eye, ChevronDown, ChevronRight,
@@ -78,6 +80,27 @@ const AdminDashboard = () => {
   const [productSearch, setProductSearch] = useState('');
   const [selectedMessage, setSelectedMessage] = useState<AdminMessage | null>(null);
   const [messageContent, setMessageContent] = useState('');
+  const [escrowOrders, setEscrowOrders] = useState<FirestoreOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
+  // Load escrow orders for admin visibility
+  useEffect(() => {
+    const loadEscrowOrders = async () => {
+      if (activeTab === 'escrow' && isAdminAuthenticated) {
+        setLoadingOrders(true);
+        try {
+          const orders = await firestoreService.getAllOrders();
+          setEscrowOrders(orders);
+        } catch (error) {
+          console.error('Error loading escrow orders:', error);
+        } finally {
+          setLoadingOrders(false);
+        }
+      }
+    };
+
+    loadEscrowOrders();
+  }, [activeTab, isAdminAuthenticated]);
 
   // Redirect if not authenticated
   if (!isAdminAuthenticated) {
@@ -93,14 +116,28 @@ const AdminDashboard = () => {
     navigate('/');
   };
 
-  const handleResolveDispute = (disputeId: string, resolution: 'buyer' | 'seller') => {
-    resolveDispute(disputeId, resolution, adminNotes);
-    toast({
-      title: "Dispute Resolved",
-      description: `Dispute resolved in favor of ${resolution}. ${resolution === 'buyer' ? 'Refund initiated.' : 'Escrow released to seller.'}`,
-    });
-    setSelectedDispute(null);
-    setAdminNotes('');
+  const handleResolveDispute = async (disputeId: string, resolution: 'buyer' | 'seller') => {
+    try {
+      const decision = resolution === 'buyer' ? 'approved' : 'rejected';
+      await firestoreService.resolveDispute(disputeId, decision, adminNotes);
+      
+      // Update local state
+      resolveDispute(disputeId, resolution, adminNotes);
+      
+      toast({
+        title: "Dispute Resolved",
+        description: `Dispute resolved in favor of ${resolution}. ${resolution === 'buyer' ? 'Refund processed.' : 'Escrow released to seller.'}`,
+      });
+      
+      setSelectedDispute(null);
+      setAdminNotes('');
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to resolve dispute. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleFreezeWallet = (userId: string, userName: string) => {
@@ -190,7 +227,7 @@ const AdminDashboard = () => {
               <Shield className="h-5 w-5 text-white" />
             </div>
             <div>
-              <span className="text-lg font-bold text-foreground">Trusty Trade</span>
+              <span className="text-lg font-bold text-foreground">ReBoxed</span>
               <Badge variant="outline" className="ml-2">Admin Panel</Badge>
             </div>
           </div>
@@ -233,6 +270,8 @@ const AdminDashboard = () => {
         <div className="flex gap-1 mb-6 bg-muted p-1 rounded-lg w-fit overflow-x-auto">
           {[
             { id: 'overview', label: 'Overview' },
+            { id: 'escrow', label: 'Escrow Transactions', count: escrowOrders.filter(o => o.escrowStatus === 'held').length },
+            { id: 'escrow-controls', label: 'Escrow Controls' },
             { id: 'disputes', label: 'Disputes', count: getOpenDisputesCount() },
             { id: 'wallets', label: 'Wallet Control', count: getFrozenWalletsCount() },
             { id: 'reports', label: 'User Reports', count: getPendingReportsCount() },
@@ -305,6 +344,126 @@ const AdminDashboard = () => {
                   <Badge className="bg-success/10 text-success border-success/20">Active</Badge>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Escrow Transactions Tab */}
+        {activeTab === 'escrow' && (
+          <div className="space-y-4">
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h3 className="text-lg font-semibold text-foreground mb-6 flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Escrow Transactions
+              </h3>
+              
+              {loadingOrders ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="h-8 w-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                </div>
+              ) : escrowOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No Escrow Transactions</h3>
+                  <p className="text-muted-foreground">No orders with escrow activity found.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {escrowOrders.map((order) => (
+                    <div key={order.orderId} className="border border-border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-medium text-foreground">Order #{order.orderId}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Product ID: {order.productId}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className={
+                            order.escrowStatus === 'held' ? 'bg-warning/10 text-warning border-warning/20' :
+                            order.escrowStatus === 'released' ? 'bg-success/10 text-success border-success/20' :
+                            order.escrowStatus === 'refunded' ? 'bg-primary/10 text-primary border-primary/20' :
+                            'bg-destructive/10 text-destructive border-destructive/20'
+                          }>
+                            {order.escrowStatus.toUpperCase()}
+                          </Badge>
+                          <Badge variant="outline">
+                            {order.verificationStatus.toUpperCase()}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <p className="text-muted-foreground">Amount</p>
+                          <p className="font-semibold text-foreground">${order.amount}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Buyer ID</p>
+                          <p className="text-foreground">{order.buyerId}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Seller ID</p>
+                          <p className="text-foreground">{order.sellerId}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Created</p>
+                          <p className="text-foreground">
+                            {order.createdAt?.toDate ? 
+                              order.createdAt.toDate().toLocaleDateString() : 
+                              'N/A'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {order.escrowStatus === 'held' && (
+                        <div className="mt-4 p-3 bg-warning/5 border border-warning/20 rounded-lg">
+                          <p className="text-sm text-warning">
+                            <Clock className="h-4 w-4 inline mr-1" />
+                            Funds are held in escrow awaiting buyer verification
+                          </p>
+                        </div>
+                      )}
+                      
+                      {order.escrowStatus === 'released' && order.verifiedAt && (
+                        <div className="mt-4 p-3 bg-success/5 border border-success/20 rounded-lg">
+                          <p className="text-sm text-success">
+                            <CheckCircle2 className="h-4 w-4 inline mr-1" />
+                            Escrow released to seller on {order.verifiedAt.toDate ? order.verifiedAt.toDate().toLocaleDateString() : 'N/A'}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {order.escrowStatus === 'refunded' && (
+                        <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                          <p className="text-sm text-primary">
+                            <DollarSign className="h-4 w-4 inline mr-1" />
+                            Escrow refunded to buyer
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Escrow Controls Tab */}
+        {activeTab === 'escrow-controls' && (
+          <div className="space-y-6">
+            <div className="bg-card rounded-xl border border-border p-6">
+              <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                Escrow System Controls
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                Manage wallet states and resolve disputes with full escrow control. 
+                This mirrors real payment system admin capabilities like Stripe Dashboard.
+              </p>
+              <EscrowControls />
             </div>
           </div>
         )}

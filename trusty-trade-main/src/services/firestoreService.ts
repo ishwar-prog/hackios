@@ -166,16 +166,19 @@ class FirestoreService {
     }
   }
 
-  // Orders
+  // Orders with full escrow lifecycle
   async createOrder(orderData: Omit<FirestoreOrder, 'orderId' | 'createdAt'>): Promise<string> {
     try {
       const batch = writeBatch(db);
       
-      // Create order
+      // Create order with proper escrow status
       const orderRef = doc(collection(db, 'orders'));
       batch.set(orderRef, {
         ...orderData,
         orderId: orderRef.id,
+        escrowStatus: 'held', // Funds are held in escrow
+        verificationStatus: 'pending', // Awaiting buyer verification
+        orderStatus: 'paid', // Order is paid
         createdAt: serverTimestamp()
       });
 
@@ -187,14 +190,47 @@ class FirestoreService {
         orderId: orderRef.id,
         amount: -orderData.amount,
         type: 'debit',
-        reason: 'Order payment',
+        reason: 'Order payment - funds held in escrow',
         timestamp: serverTimestamp()
+      });
+
+      // Update buyer's wallet balance in users collection
+      const buyerRef = doc(db, 'users', orderData.buyerId);
+      batch.update(buyerRef, {
+        walletBalance: increment(-orderData.amount),
+        updatedAt: serverTimestamp()
       });
 
       // Update product status to sold
       batch.update(doc(db, 'products', orderData.productId), {
         status: 'sold',
         updatedAt: serverTimestamp()
+      });
+
+      // Create notification for buyer
+      const buyerNotificationRef = doc(collection(db, 'notifications'));
+      batch.set(buyerNotificationRef, {
+        notificationId: buyerNotificationRef.id,
+        userId: orderData.buyerId,
+        title: 'Order Confirmed',
+        message: `Your order has been placed. Funds are held securely in escrow.`,
+        type: 'order',
+        relatedOrderId: orderRef.id,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      // Create notification for seller
+      const sellerNotificationRef = doc(collection(db, 'notifications'));
+      batch.set(sellerNotificationRef, {
+        notificationId: sellerNotificationRef.id,
+        userId: orderData.sellerId,
+        title: 'New Order Received',
+        message: `You have received a new order. Please ship the item promptly.`,
+        type: 'order',
+        relatedOrderId: orderRef.id,
+        read: false,
+        createdAt: serverTimestamp()
       });
 
       await batch.commit();
@@ -222,11 +258,99 @@ class FirestoreService {
     }
   }
 
+  // Get all orders for admin panel
+  async getAllOrders(): Promise<FirestoreOrder[]> {
+    try {
+      const q = query(
+        collection(db, 'orders'),
+        orderBy('createdAt', 'desc')
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => doc.data() as FirestoreOrder);
+    } catch (error) {
+      console.error('Error getting all orders:', error);
+      throw error;
+    }
+  }
+
   async updateOrder(orderId: string, updates: Partial<FirestoreOrder>): Promise<void> {
     try {
       await updateDoc(doc(db, 'orders', orderId), updates);
     } catch (error) {
       console.error('Error updating order:', error);
+      throw error;
+    }
+  }
+
+  // Buyer marks product as received - releases escrow
+  async verifyOrderAndReleaseEscrow(orderId: string): Promise<void> {
+    try {
+      const batch = writeBatch(db);
+      
+      // Get order details
+      const orderDoc = await getDoc(doc(db, 'orders', orderId));
+      if (!orderDoc.exists()) {
+        throw new Error('Order not found');
+      }
+      
+      const order = orderDoc.data() as FirestoreOrder;
+      
+      // Update order status
+      batch.update(doc(db, 'orders', orderId), {
+        verificationStatus: 'verified',
+        escrowStatus: 'released',
+        orderStatus: 'completed',
+        verifiedAt: serverTimestamp()
+      });
+
+      // Create wallet transaction (credit seller)
+      const transactionRef = doc(collection(db, 'walletTransactions'));
+      batch.set(transactionRef, {
+        transactionId: transactionRef.id,
+        userId: order.sellerId,
+        orderId: orderId,
+        amount: order.amount,
+        type: 'credit',
+        reason: 'Escrow released - order verified by buyer',
+        timestamp: serverTimestamp()
+      });
+
+      // Update seller's wallet balance
+      const sellerRef = doc(db, 'users', order.sellerId);
+      batch.update(sellerRef, {
+        walletBalance: increment(order.amount),
+        updatedAt: serverTimestamp()
+      });
+
+      // Create notifications
+      const buyerNotificationRef = doc(collection(db, 'notifications'));
+      batch.set(buyerNotificationRef, {
+        notificationId: buyerNotificationRef.id,
+        userId: order.buyerId,
+        title: 'Order Completed',
+        message: `Order verified successfully. Thank you for your purchase!`,
+        type: 'order',
+        relatedOrderId: orderId,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      const sellerNotificationRef = doc(collection(db, 'notifications'));
+      batch.set(sellerNotificationRef, {
+        notificationId: sellerNotificationRef.id,
+        userId: order.sellerId,
+        title: 'Payment Released',
+        message: `Buyer verified the order. Payment of $${order.amount} has been released to your wallet.`,
+        type: 'order',
+        relatedOrderId: orderId,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Error verifying order and releasing escrow:', error);
       throw error;
     }
   }
@@ -275,6 +399,22 @@ class FirestoreService {
     try {
       const batch = writeBatch(db);
       
+      // Get dispute to find related order
+      const disputeDoc = await getDoc(doc(db, 'disputes', disputeId));
+      if (!disputeDoc.exists()) {
+        throw new Error('Dispute not found');
+      }
+      
+      const dispute = disputeDoc.data() as FirestoreDispute;
+      
+      // Get order details
+      const orderDoc = await getDoc(doc(db, 'orders', dispute.orderId));
+      if (!orderDoc.exists()) {
+        throw new Error('Order not found');
+      }
+      
+      const order = orderDoc.data() as FirestoreOrder;
+      
       // Update dispute
       batch.update(doc(db, 'disputes', disputeId), {
         status: decision,
@@ -283,23 +423,106 @@ class FirestoreService {
         resolvedAt: serverTimestamp()
       });
 
-      // Get dispute to find related order
-      const disputeDoc = await getDoc(doc(db, 'disputes', disputeId));
-      if (disputeDoc.exists()) {
-        const dispute = disputeDoc.data() as FirestoreDispute;
-        
-        // Update order based on decision
-        if (decision === 'approved') {
-          batch.update(doc(db, 'orders', dispute.orderId), {
-            escrowStatus: 'refunded',
-            verificationStatus: 'disputed'
-          });
-        } else {
-          batch.update(doc(db, 'orders', dispute.orderId), {
-            escrowStatus: 'released',
-            verificationStatus: 'verified'
-          });
-        }
+      if (decision === 'approved') {
+        // Refund buyer - escrow goes back to buyer
+        batch.update(doc(db, 'orders', dispute.orderId), {
+          escrowStatus: 'refunded',
+          verificationStatus: 'disputed',
+          orderStatus: 'refunded'
+        });
+
+        // Create wallet transaction (credit buyer)
+        const transactionRef = doc(collection(db, 'walletTransactions'));
+        batch.set(transactionRef, {
+          transactionId: transactionRef.id,
+          userId: order.buyerId,
+          orderId: dispute.orderId,
+          amount: order.amount,
+          type: 'credit',
+          reason: 'Dispute approved - refund processed',
+          timestamp: serverTimestamp()
+        });
+
+        // Update buyer's wallet balance
+        batch.update(doc(db, 'users', order.buyerId), {
+          walletBalance: increment(order.amount),
+          updatedAt: serverTimestamp()
+        });
+
+        // Notifications
+        const buyerNotificationRef = doc(collection(db, 'notifications'));
+        batch.set(buyerNotificationRef, {
+          notificationId: buyerNotificationRef.id,
+          userId: order.buyerId,
+          title: 'Dispute Approved',
+          message: `Your dispute has been approved. Refund of $${order.amount} has been processed.`,
+          type: 'dispute',
+          relatedOrderId: dispute.orderId,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+
+        const sellerNotificationRef = doc(collection(db, 'notifications'));
+        batch.set(sellerNotificationRef, {
+          notificationId: sellerNotificationRef.id,
+          userId: order.sellerId,
+          title: 'Dispute Resolved',
+          message: `Dispute was approved in favor of buyer. Please review your product quality.`,
+          type: 'dispute',
+          relatedOrderId: dispute.orderId,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+      } else {
+        // Reject dispute - release escrow to seller
+        batch.update(doc(db, 'orders', dispute.orderId), {
+          escrowStatus: 'released',
+          verificationStatus: 'verified',
+          orderStatus: 'completed'
+        });
+
+        // Create wallet transaction (credit seller)
+        const transactionRef = doc(collection(db, 'walletTransactions'));
+        batch.set(transactionRef, {
+          transactionId: transactionRef.id,
+          userId: order.sellerId,
+          orderId: dispute.orderId,
+          amount: order.amount,
+          type: 'credit',
+          reason: 'Dispute rejected - escrow released to seller',
+          timestamp: serverTimestamp()
+        });
+
+        // Update seller's wallet balance
+        batch.update(doc(db, 'users', order.sellerId), {
+          walletBalance: increment(order.amount),
+          updatedAt: serverTimestamp()
+        });
+
+        // Notifications
+        const buyerNotificationRef = doc(collection(db, 'notifications'));
+        batch.set(buyerNotificationRef, {
+          notificationId: buyerNotificationRef.id,
+          userId: order.buyerId,
+          title: 'Dispute Rejected',
+          message: `Your dispute has been reviewed and rejected. Payment has been released to seller.`,
+          type: 'dispute',
+          relatedOrderId: dispute.orderId,
+          read: false,
+          createdAt: serverTimestamp()
+        });
+
+        const sellerNotificationRef = doc(collection(db, 'notifications'));
+        batch.set(sellerNotificationRef, {
+          notificationId: sellerNotificationRef.id,
+          userId: order.sellerId,
+          title: 'Dispute Resolved',
+          message: `Dispute was rejected. Payment of $${order.amount} has been released to your wallet.`,
+          type: 'dispute',
+          relatedOrderId: dispute.orderId,
+          read: false,
+          createdAt: serverTimestamp()
+        });
       }
 
       await batch.commit();

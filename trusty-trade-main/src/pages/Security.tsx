@@ -85,7 +85,7 @@ const Security = () => {
       current: true
     },
     {
-      name: 'SafeTrade Mobile App',
+      name: 'ReBoxed Mobile App',
       type: 'Mobile',
       location: 'San Francisco, CA',
       lastActive: '2 hours ago',

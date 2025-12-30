@@ -142,7 +142,7 @@ interface AdminStore {
   getActiveListingsCount: () => number
 }
 
-const ADMIN_EMAIL = 'admin@trustytrade.com'
+const ADMIN_EMAIL = 'admin@reboxed.in'
 const ADMIN_PASSWORD = 'admin123'
 
 export const useAdminStore = create<AdminStore>()(

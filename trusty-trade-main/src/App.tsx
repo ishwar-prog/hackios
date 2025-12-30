@@ -7,6 +7,7 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthGuard } from "@/components/shared/AuthGuard";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useWalletStore } from "@/store/useWalletStore";
 import { firebaseAuthService } from "@/services/firebaseAuth";
 import Index from "./pages/Index";
 import ProductDetail from "./pages/ProductDetail";
@@ -35,15 +36,24 @@ import ReturnPolicy from "./pages/ReturnPolicy";
 import MarketplaceRules from "./pages/MarketplaceRules";
 import VerificationGuide from "./pages/VerificationGuide";
 
+// Import escrow demo for development testing
+import "./test/escrow-demo";
+
 const queryClient = new QueryClient();
 
 const App = () => {
-  const { setUser, initializeAuth } = useAuthStore();
+  const { user, setUser, initializeAuth } = useAuthStore();
+  const { setCurrentUser } = useWalletStore();
 
   useEffect(() => {
     // Initialize auth state (this sets up the auth state listener internally)
     initializeAuth();
   }, [initializeAuth]);
+
+  // Update wallet store when user changes
+  useEffect(() => {
+    setCurrentUser(user?.id || null);
+  }, [user?.id, setCurrentUser]);
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="trusty-trade-theme">

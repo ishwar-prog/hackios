@@ -33,54 +33,47 @@ interface CurrencyStore {
   formatPriceValue: (priceInINR: number) => { symbol: string; value: number; formatted: string }
 }
 
+// FIXED: Force INR-only currency system - no conversions allowed
 export const useCurrencyStore = create<CurrencyStore>()(
   persist(
     (set, get) => ({
-      currency: currencies[0], // Default to INR
+      currency: currencies[0], // Always INR - locked
 
       setCurrency: (code: CurrencyCode) => {
-        const currency = currencies.find(c => c.code === code)
-        if (currency) {
-          set({ currency })
+        // PRODUCTION LOCK: Only allow INR to prevent currency mixing
+        if (code === 'INR') {
+          const currency = currencies.find(c => c.code === code)
+          if (currency) {
+            set({ currency })
+          }
         }
       },
 
       convertFromINR: (priceInINR: number) => {
-        const { currency } = get()
-        return Math.round(priceInINR * currency.rate)
+        // PRODUCTION LOCK: No conversion - always return INR value
+        return Math.round(priceInINR)
       },
 
       convertToINR: (price: number, fromCurrency: CurrencyCode) => {
-        const curr = currencies.find(c => c.code === fromCurrency)
-        if (!curr) return price
-        return Math.round(price / curr.rate)
+        // PRODUCTION LOCK: No conversion - always return input value as INR
+        return Math.round(price)
       },
 
       formatPrice: (priceInINR: number) => {
-        const { currency } = get()
-        const converted = Math.round(priceInINR * currency.rate)
-        
-        if (currency.code === 'INR') {
-          return `${currency.symbol}${converted.toLocaleString('en-IN')}`
-        }
-        return `${currency.symbol}${converted.toLocaleString()}`
+        // PRODUCTION LOCK: Always format as INR
+        const value = Math.round(priceInINR)
+        return `₹${value.toLocaleString('en-IN')}`
       },
 
       formatPriceValue: (priceInINR: number) => {
-        const { currency } = get()
-        const converted = Math.round(priceInINR * currency.rate)
-        
-        let formatted: string
-        if (currency.code === 'INR') {
-          formatted = converted.toLocaleString('en-IN')
-        } else {
-          formatted = converted.toLocaleString()
-        }
+        // PRODUCTION LOCK: Always format as INR
+        const value = Math.round(priceInINR)
+        const formatted = value.toLocaleString('en-IN')
         
         return {
-          symbol: currency.symbol,
-          value: converted,
-          formatted: `${currency.symbol}${formatted}`
+          symbol: '₹',
+          value: value,
+          formatted: `₹${formatted}`
         }
       },
     }),

@@ -14,7 +14,8 @@ interface OrderCardProps {
   className?: string
 }
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; icon: typeof Clock; color: string; bgColor: string }> = {
+  // Lowercase statuses (legacy)
   pending_payment: {
     label: 'Pending Payment',
     icon: Clock,
@@ -62,7 +63,52 @@ const statusConfig = {
     icon: CheckCircle,
     color: 'text-muted-foreground',
     bgColor: 'bg-muted'
+  },
+  // Uppercase statuses (enhanced order store)
+  PAID: {
+    label: 'Payment Secured',
+    icon: CheckCircle,
+    color: 'text-success',
+    bgColor: 'bg-success/10'
+  },
+  SHIPPED: {
+    label: 'Shipped',
+    icon: Truck,
+    color: 'text-primary',
+    bgColor: 'bg-primary/10'
+  },
+  DELIVERED: {
+    label: 'Delivered - Verify Now',
+    icon: Package,
+    color: 'text-warning',
+    bgColor: 'bg-warning/10'
+  },
+  VERIFIED: {
+    label: 'Verified & Complete',
+    icon: CheckCircle,
+    color: 'text-success',
+    bgColor: 'bg-success/10'
+  },
+  DISPUTED: {
+    label: 'Dispute in Progress',
+    icon: AlertTriangle,
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10'
+  },
+  REFUNDED: {
+    label: 'Refunded',
+    icon: CheckCircle,
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted'
   }
+}
+
+// Default config for unknown statuses
+const defaultStatusConfig = {
+  label: 'Processing',
+  icon: Clock,
+  color: 'text-muted-foreground',
+  bgColor: 'bg-muted'
 }
 
 export const OrderCard = ({ 
@@ -72,7 +118,8 @@ export const OrderCard = ({
   showActions = true,
   className 
 }: OrderCardProps) => {
-  const config = statusConfig[order.status]
+  // Get config with fallback to default
+  const config = statusConfig[order.status] || defaultStatusConfig
   const StatusIcon = config.icon
 
   const handleExpire = () => {
@@ -82,12 +129,31 @@ export const OrderCard = ({
     }
   }
 
-  const conditionDisplay = {
+  const conditionDisplay: Record<string, string> = {
     'excellent': 'Excellent',
+    'Excellent': 'Excellent',
     'good': 'Good',
+    'Good': 'Good',
     'fair': 'Fair',
+    'Fair': 'Fair',
     'poor': 'Poor',
+    'Poor': 'Poor',
   }
+
+  // Safe access to product properties with fallbacks
+  const productImage = order.product?.image || '/placeholder.svg'
+  const productName = order.product?.name || 'Unknown Product'
+  const productCategory = typeof order.product?.category === 'string' 
+    ? order.product.category 
+    : order.product?.category?.name || 'Unknown Category'
+  const productCondition = order.product?.condition || 'good'
+  const orderId = order.orderId || order.id || 'Unknown'
+  const orderAmount = order.amount || order.product?.price || 0
+  const orderDate = order.createdAt 
+    ? new Date(order.createdAt).toLocaleDateString() 
+    : order.orderDate || 'Unknown Date'
+  const escrowStatus = order.escrowStatus?.toLowerCase() || 'held'
+  const orderStatus = order.status?.toLowerCase() || 'paid'
 
   return (
     <div className={cn('bg-card border border-border rounded-lg p-6', className)}>
@@ -95,8 +161,8 @@ export const OrderCard = ({
         {/* Product Image */}
         <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex-shrink-0">
           <img
-            src={order.product.image}
-            alt={order.product.name}
+            src={productImage}
+            alt={productName}
             className="w-full h-full object-cover"
           />
         </div>
@@ -106,19 +172,19 @@ export const OrderCard = ({
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
             <div>
               <h3 className="font-semibold text-foreground line-clamp-2">
-                {order.product.name}
+                {productName}
               </h3>
               <p className="text-sm text-muted-foreground">
-                Order #{order.id} • {order.product.category}
+                Order #{orderId} • {productCategory}
               </p>
               <Badge variant="outline" className="mt-1 text-xs">
-                {conditionDisplay[order.product.condition]}
+                {conditionDisplay[productCondition] || productCondition}
               </Badge>
             </div>
             <div className="text-right">
-              <p className="text-lg font-bold text-foreground">${order.amount}</p>
+              <p className="text-lg font-bold text-foreground">₹{orderAmount.toLocaleString()}</p>
               <p className="text-xs text-muted-foreground">
-                {new Date(order.createdAt).toLocaleDateString()}
+                {orderDate}
               </p>
             </div>
           </div>
@@ -134,7 +200,7 @@ export const OrderCard = ({
           </div>
 
           {/* Verification Timer */}
-          {order.status === 'delivered' && order.verificationDeadline && (
+          {(orderStatus === 'delivered' || order.status === 'DELIVERED') && order.verificationDeadline && (
             <div className="mb-4">
               <CountdownTimer
                 endTime={order.verificationDeadline}
@@ -148,12 +214,12 @@ export const OrderCard = ({
           {/* Actions */}
           {showActions && (
             <div className="flex flex-wrap gap-2">
-              {order.status === 'delivered' && (
+              {(orderStatus === 'delivered' || order.status === 'DELIVERED') && (
                 <>
                   <Button
                     size="sm"
                     variant="trust"
-                    onClick={() => onVerify?.(order.id)}
+                    onClick={() => onVerify?.(order.orderId || order.id)}
                     className="flex-1 sm:flex-none"
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
@@ -162,7 +228,7 @@ export const OrderCard = ({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => onDispute?.(order.id)}
+                    onClick={() => onDispute?.(order.orderId || order.id)}
                     className="flex-1 sm:flex-none"
                   >
                     <AlertTriangle className="h-4 w-4 mr-2" />
@@ -171,7 +237,7 @@ export const OrderCard = ({
                 </>
               )}
               
-              {order.status === 'shipped' && order.trackingNumber && (
+              {(orderStatus === 'shipped' || order.status === 'SHIPPED') && order.trackingNumber && (
                 <Button size="sm" variant="outline" className="flex-1 sm:flex-none">
                   <Truck className="h-4 w-4 mr-2" />
                   Track Package
@@ -194,15 +260,15 @@ export const OrderCard = ({
           <span className="text-muted-foreground">Escrow Status:</span>
           <span className={cn(
             'font-medium capitalize',
-            order.escrowStatus === 'held' && 'text-primary',
-            order.escrowStatus === 'released' && 'text-success',
-            order.escrowStatus === 'refunded' && 'text-muted-foreground',
-            order.escrowStatus === 'disputed' && 'text-destructive'
+            (escrowStatus === 'held' || order.escrowStatus === 'HELD') && 'text-primary',
+            (escrowStatus === 'released' || order.escrowStatus === 'RELEASED') && 'text-success',
+            (escrowStatus === 'refunded' || order.escrowStatus === 'REFUNDED') && 'text-muted-foreground',
+            (escrowStatus === 'disputed') && 'text-destructive'
           )}>
-            {order.escrowStatus === 'held' && 'Funds Secured'}
-            {order.escrowStatus === 'released' && 'Payment Released'}
-            {order.escrowStatus === 'refunded' && 'Refund Processed'}
-            {order.escrowStatus === 'disputed' && 'Under Review'}
+            {(escrowStatus === 'held' || order.escrowStatus === 'HELD') && 'Funds Secured'}
+            {(escrowStatus === 'released' || order.escrowStatus === 'RELEASED') && 'Payment Released'}
+            {(escrowStatus === 'refunded' || order.escrowStatus === 'REFUNDED') && 'Refund Processed'}
+            {escrowStatus === 'disputed' && 'Under Review'}
           </span>
         </div>
       </div>

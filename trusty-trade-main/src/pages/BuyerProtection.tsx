@@ -13,7 +13,7 @@ const BuyerProtection = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-4">Buyer Protection</h1>
           <p className="text-lg text-muted-foreground">
-            At Trusty Trade, your safety is our priority. Every purchase is protected by our comprehensive buyer protection program.
+            At ReBoxed, your safety is our priority. Every purchase is protected by our comprehensive buyer protection program.
           </p>
         </div>
 

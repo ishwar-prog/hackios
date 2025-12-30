@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Shield, User, Menu, X, Bell, Heart, LogIn, LogOut } from 'lucide-react';
+import { User, Menu, X, Bell, Heart, LogIn, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AnimatedThemeToggle } from '@/components/ui/animated-theme-toggle';
 import { useState, useMemo } from 'react';
@@ -54,10 +54,8 @@ export const Header = () => {
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-trust">
-            <Shield className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold text-foreground">Trusty Trade</span>
+          <img src="/reboxed-logo.svg" alt="ReBoxed" className="h-9 w-9 rounded-lg object-contain" />
+          <span className="text-xl font-bold text-foreground">ReBoxed</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-1">

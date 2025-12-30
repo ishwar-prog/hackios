@@ -11,6 +11,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useDraftProductStore } from '@/store/useDraftProductStore';
 import { useToast } from '@/hooks/use-toast';
+import { firestoreService } from '@/services/firestoreService';
 import { Upload, X, Camera, Shield, CheckCircle2, AlertCircle, Package, IndianRupee, LogIn } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
@@ -108,14 +109,58 @@ const Sell = () => {
   const submitProduct = async () => {
     setIsSubmitting(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Use Firestore service to create product
+      const productData = {
+        sellerId: user?.id || 'user-1',
+        title: formData.name,
+        description: formData.description,
+        category: formData.category,
+        price: formData.price,
+        originalPrice: formData.originalPrice,
+        condition: formData.condition,
+        images: images, // In real app, these would be uploaded to Firebase Storage first
+        specifications: {
+          brand: formData.brand,
+          location: formData.location,
+          purchaseYear: formData.purchaseYear,
+          usageDuration: formData.usageDuration,
+          warrantyRemaining: formData.warrantyRemaining ? 'Yes' : 'No',
+          warrantyDuration: formData.warrantyDuration,
+          accessoriesIncluded: formData.accessoriesIncluded,
+          conditionNotes: formData.conditionNotes
+        },
+        brand: formData.brand,
+        model: formData.name, // Use name as model for now
+        location: formData.location,
+        status: 'listed' as const
+      };
+
+      // Create product in Firestore - this will throw if it fails
+      const productId = await firestoreService.createProduct(productData);
+      
+      // Add product to local store for immediate UI update
       const product = addProduct({ ...formData, images }, user?.id || 'user-1', user?.name || 'User');
-      notifyProductListed(product.id, formData.name);
+      
+      // Notify about successful listing
+      notifyProductListed(productId, formData.name);
       clearDraft();
-      toast({ title: "Product Listed!", description: "Your product is now live on the marketplace." });
-      navigate(`/product/${product.id}`);
+      
+      // Show SUCCESS toast (green) - only reached if Firestore operation succeeded
+      toast({ 
+        title: "Product Listed Successfully!", 
+        description: "Your product is now live on the marketplace.",
+        variant: "default" // This shows green success toast
+      });
+      
+      navigate(`/product/${productId}`);
     } catch (error) {
-      toast({ title: "Error", description: "Failed to list product. Please try again.", variant: "destructive" });
+      console.error('Product listing error:', error);
+      // Show ERROR toast (red) only on actual failure
+      toast({ 
+        title: "Listing Failed", 
+        description: error instanceof Error ? error.message : "Failed to list product. Please try again.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -133,7 +178,7 @@ const Sell = () => {
       <div className="container py-8 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Sell Your Product</h1>
-          <p className="text-muted-foreground">List your electronics on Trusty Trade with escrow protection.</p>
+          <p className="text-muted-foreground">List your electronics on ReBoxed with escrow protection.</p>
         </div>
 
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-5 mb-8">
